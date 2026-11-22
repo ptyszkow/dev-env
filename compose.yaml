@@ -1,0 +1,33 @@
+services:
+  dev-env:
+    container_name: dev-env
+    image: ${SANDBOX_IMAGE:-localhost/ai-sandbox:fedora45}
+    pull_policy: never
+    init: true
+    stdin_open: true
+    tty: true
+    environment:
+      TERM: "${TERM:-xterm-256color}"
+      COLORTERM: "${COLORTERM:-}"
+    user: "1000:1000"
+    userns_mode: "keep-id:uid=1000,gid=1000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    shm_size: 512m
+    command: ["sleep", "infinity"]
+    ports:
+      - "127.0.0.1:5005:5005/tcp"
+    build:
+      context: .
+      dockerfile: Containerfile
+    volumes:
+      - type: bind
+        source: ${SANDBOX_WORKSPACE:-${HOME:-${USERPROFILE}}/Projects}
+        target: /workspace
+        bind:
+          selinux: z
+      - "${SANDBOX_HOME:-agent-home}:/home/agent:rw,z"
+
+volumes:
+  agent-home:
+    name: ${SANDBOX_HOME_VOLUME:-ai-sandbox-home}

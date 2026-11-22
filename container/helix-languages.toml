@@ -1,0 +1,9 @@
+[language-server.roslyn]
+command = "roslyn-language-server"
+args = ["--stdio", "--autoLoadProjects"]
+
+[[language]]
+name = "c-sharp"
+language-id = "csharp"
+roots = ["sln", "slnx", "csproj"]
+language-servers = ["roslyn"]

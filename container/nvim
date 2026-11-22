@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/${NVIM_APPNAME:-nvim}
+if [ "${NVIM_APPNAME:-nvim}" = nvim ] && [ ! -e "$config_dir" ] && [ ! -L "$config_dir" ]; then
+    mkdir -p "$(dirname "$config_dir")"
+    if mkdir "$config_dir"; then
+        cp -R /opt/sandbox/lazyvim/. "$config_dir/"
+    fi
+fi
+exec /usr/bin/nvim "$@"

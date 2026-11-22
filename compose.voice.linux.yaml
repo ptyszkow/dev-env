@@ -1,0 +1,11 @@
+services:
+  dev-env:
+    environment:
+      PULSE_SERVER: unix:/run/sandbox-pulse/native
+    volumes:
+      - type: bind
+        source: ${SANDBOX_PULSE_SOCKET:-${XDG_RUNTIME_DIR:?Set XDG_RUNTIME_DIR or SANDBOX_PULSE_SOCKET}/pulse/native}
+        target: /run/sandbox-pulse/native
+        read_only: true
+        bind:
+          create_host_path: false

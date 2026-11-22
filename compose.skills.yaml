@@ -1,0 +1,5 @@
+services:
+  dev-env:
+    volumes:
+      - "${SANDBOX_SKILLS_DIR:?Set SANDBOX_SKILLS_DIR}:/home/agent/.agents/skills:ro,z"
+      - "${SANDBOX_SKILLS_DIR:?Set SANDBOX_SKILLS_DIR}:/home/agent/.claude/skills:ro,z"

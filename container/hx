@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/helix
+for file in config.toml languages.toml; do
+    if [ ! -e "$config_dir/$file" ] && [ ! -L "$config_dir/$file" ]; then
+        mkdir -p "$config_dir"
+        cp --update=none -- "/opt/sandbox/helix/$file" "$config_dir/$file"
+    fi
+done
+exec /usr/bin/hx "$@"

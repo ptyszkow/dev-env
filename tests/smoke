@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Exercise the shared Compose container without provider credentials or model requests.
+set -euo pipefail
+repo=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
+fixture=$(mktemp -d)
+project="sandbox-smoke-${fixture##*.}"
+compose=(podman compose -p "${project,,}" -f "$repo/compose.yaml" -f "$repo/compose.skills.yaml")
+export SANDBOX_WORKSPACE="$fixture/workspace" SANDBOX_SKILLS_DIR="$fixture/skills"
+export SANDBOX_HOME=agent-home SANDBOX_HOME_VOLUME="${project,,}-home"
+cleanup() {
+    "${compose[@]}" down || true
+    if podman volume exists "$SANDBOX_HOME_VOLUME"; then podman volume rm "$SANDBOX_HOME_VOLUME"; fi
+    rm -rf -- "$fixture"
+}
+trap cleanup EXIT
+run=("${compose[@]}" exec -T)
+mkdir -p "$SANDBOX_WORKSPACE" "$SANDBOX_SKILLS_DIR/probe"
+printf '%s\n' '---' 'name: probe' 'description: Read the fixture.' '---' 'Read resource.txt.' > "$fixture/skills/probe/SKILL.md"
+echo 'skill resource' > "$fixture/skills/probe/resource.txt"
+cd "$SANDBOX_WORKSPACE"
+cat > index.html <<'HTML'
+<button onclick="this.textContent='Passed'">Run test</button>
+HTML
+cat > check-session <<'CHECK'
+set -euo pipefail
+agent=$1
+test "$HOME" = /home/agent
+test "$PWD" = /workspace
+skill_dir="$HOME/.agents/skills"
+if [[ $agent == claude ]]; then skill_dir="$HOME/.claude/skills"; fi
+rg -Fx 'skill resource' "$skill_dir/probe/resource.txt"
+if touch "$skill_dir/probe/.write-test" 2>/dev/null; then exit 1; fi
+echo "$agent" > "$HOME/volume-check-$agent"
+echo "$agent" > "$agent.output"
+python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+server=$!
+trap 'agent-browser close >/dev/null; kill "$server"' EXIT
+curl -fsS --retry 8 --retry-connrefused --retry-delay 1 http://127.0.0.1:8765/ >/dev/null
+agent-browser open http://127.0.0.1:8765/
+agent-browser snapshot -i | rg 'Run test'
+agent-browser click 'button'
+agent-browser snapshot -i | rg 'Passed'
+CHECK
+"${compose[@]}" up -d
+agents=(codex claude grok)
+session=("${run[@]}" dev-env)
+for agent in "${agents[@]}"; do
+    "${session[@]}" "$agent" --version
+    "${session[@]}" bash check-session "$agent"
+    [[ $(stat -c '%u' "$agent.output") == "$(id -u)" ]]
+done
+
+"${compose[@]}" down
+"${compose[@]}" up -d
+for agent in "${agents[@]}"; do
+    "${session[@]}" bash -ec 'test "$(cat "$HOME/volume-check-$1")" = "$1"' _ "$agent"
+done
+
+# Use a container-local file to check that concurrent sessions share a container.
+"${session[@]}" bash -ec '
+    touch /tmp/concurrent-ready
+    for ((i=0;i<60;i++)); do
+        if [[ -f /tmp/concurrent-reply ]]; then exit 0; fi
+        sleep 1
+    done
+    exit 1
+' &
+peer=$!
+"${run[@]}" dev-env bash -ec '
+    for ((i=0;i<60;i++)); do
+        if [[ -f /tmp/concurrent-ready ]]; then touch /tmp/concurrent-reply; exit 0; fi
+        sleep 1
+    done
+    exit 1
+'
+wait "$peer"
+"${run[@]}" dev-env bash -se <<'CHECK'
+set -o pipefail
+for cmd in git rg fd jq bun bunx uv rustfmt cargo-clippy clang cmake ninja; do command -v "$cmd"; done
+printf 'fn main() { println!("rust"); }\n' > hello.rs
+rustc hello.rs -o hello-rust
+./hello-rust | rg -x rust
+printf '#include <iostream>\nint main(){std::cout << "clang";}\n' > hello.cpp
+clang++ -fuse-ld=lld hello.cpp -o hello-cpp
+./hello-cpp | rg -x clang
+dotnet new console --no-restore -o dotnet-test
+dotnet run --project dotnet-test | rg -F 'Hello, World!'
+bun -e 'console.log("bun")' | rg -x bun
+uv run --offline --no-project --python /usr/local/bin/python3 python -c 'print("uv")' | rg -x uv
+CHECK
+podman image inspect "${SANDBOX_IMAGE:-localhost/ai-sandbox:fedora45}" --format 'Verified local image {{.Id}}'

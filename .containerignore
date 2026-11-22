@@ -1,0 +1,11 @@
+*
+!Containerfile
+!container/
+container/*
+!container/browser-skill.md
+!container/lazyvim/
+!container/lazyvim/**
+!container/nvim
+!container/helix-config.toml
+!container/helix-languages.toml
+!container/hx
